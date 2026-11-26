@@ -1,0 +1,102 @@
+/**
+ * Reusable security finding model across all DevPilot security modules.
+ */
+
+export type SeverityLevel = 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW' | 'UNKNOWN';
+
+export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export type DependencyType = 'direct' | 'transitive';
+
+export type SeveritySource =
+  | 'database_specific'
+  | 'calculated_cvss3'
+  | 'explicit_score'
+  | 'unknown';
+
+export interface RemediationDetails {
+  recommendedVersion?: string;
+  safeInCurrentMajor?: boolean;
+  requiresMajorUpgrade?: boolean;
+  notes?: string;
+}
+
+export interface SecurityFinding {
+  /** Unique identifier for the finding instance */
+  id: string;
+
+  /** Name of the scanner that generated this finding (e.g., 'dependency-scanner') */
+  scanner: string;
+
+  /** Target package or module name */
+  packageName: string;
+
+  /** Installed or affected version in the project */
+  installedVersion: string;
+
+  /** Primary vulnerability identifier (e.g., CVE-2021-23337, GHSA-35jh-r3h4-6jhm, OSV-...) */
+  vulnerabilityId: string;
+
+  /** Known alternative identifiers for the vulnerability */
+  aliases: string[];
+
+  /** Concise summary or title of the vulnerability */
+  title: string;
+
+  /** Detailed description or advisory notes */
+  description: string;
+
+  /** Standardized severity rating */
+  severity: SeverityLevel;
+
+  /** Source of the severity rating */
+  severitySource?: SeveritySource;
+
+  /** CVSS specification version (e.g., '3.0', '3.1', '4.0') */
+  cvssVersion?: '3.0' | '3.1' | '4.0' | 'other';
+
+  /** CVSS numeric score string, only present when a valid score is available */
+  cvssScore?: string;
+
+  /** Raw CVSS vector string, if available */
+  cvssVector?: string;
+
+  /** Versions that remediate or patch this vulnerability */
+  fixedVersions: string[];
+
+  /** Advisory references and documentation URLs */
+  references: string[];
+
+  /** Whether the dependency is direct or transitive */
+  dependencyType: DependencyType;
+
+  /** Assessment confidence level */
+  confidence: ConfidenceLevel;
+
+  /** Evidence path or context (e.g., node_modules/lodash@4.17.20) */
+  evidence: string;
+
+  /** Actionable remediation recommendation */
+  remediation: string;
+
+  /** Structured remediation metadata */
+  remediationDetails?: RemediationDetails;
+
+  /** True if the full advisory could not be hydrated from OSV and represents a partial/minimal record */
+  isIncomplete?: boolean;
+
+  /** True if semver matching could not be established with full confidence (indeterminate) */
+  isIndeterminate?: boolean;
+
+  /** Optional and bundled flags */
+  isOptional?: boolean;
+  isBundled?: boolean;
+}
+
+export const SEVERITY_ORDER: Record<SeverityLevel, number> = {
+  CRITICAL: 5,
+  HIGH: 4,
+  MODERATE: 3,
+  LOW: 2,
+  UNKNOWN: 1
+};
