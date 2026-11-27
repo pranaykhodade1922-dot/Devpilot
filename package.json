@@ -28,8 +28,12 @@
     "developer-tools",
     "devsecops"
   ],
-  "author": "",
+  "author": "Pranay Khodade",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pranaykhodade1922-dot/Devpilot.git"
+  },
   "dependencies": {
     "chalk": "^5.4.1",
     "commander": "^13.1.0",

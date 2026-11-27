@@ -70,7 +70,7 @@ All contributions are expected to maintain our high standard of code quality and
 
 - **Strict Type Checking**: Must pass `npm run typecheck` (`tsc --noEmit`) with zero errors.
 - **Comprehensive Unit Tests**: All new features, bug fixes, and rules must include Vitest tests under `tests/`.
-- **Zero Real Secrets**: Test fixtures must **never** contain real credentials, production API keys, or live tokens. Use synthetic, mock identifiers (e.g., `AKIAIOSFODNN7EXAMPLE`).
+- **Zero Real Secrets**: Test fixtures must **never** contain real credentials, production API keys, or live tokens. Use synthetic, mock identifiers (e.g., `AWS_ACCESS_KEY_ID_PLACEHOLDER`).
 - **No Path Leaks**: Never hardcode personal host paths. Keep relative path conventions.
 - **Fail-Safe Scanner Design**: Scanners must never crash or throw unhandled exceptions. Errors should result in clear, documented exit codes (`FAILED` or `PARTIAL`).
 
