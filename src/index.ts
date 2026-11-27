@@ -10,6 +10,7 @@ export {
 
 export {
   type SecurityFinding,
+  type SourceLocation,
   type SeverityLevel,
   type ConfidenceLevel,
   type DependencyType,
@@ -51,12 +52,84 @@ export {
   type OsvClientOptions
 } from './scanners/dependency/index.js';
 
-export { getDevPilotVersion, CLI_VERSION } from './utils/version.js';
+export {
+  getDevPilotVersion,
+  getPackageMetadata,
+  CLI_VERSION,
+  type PackageMetadata
+} from './utils/version.js';
 export { getDoctorInfo, type DoctorResult } from './cli/commands/doctor.js';
 export {
+  getAboutInfo,
+  formatAboutOutput,
+  runAbout,
+  type AboutInfo
+} from './cli/commands/about.js';
+export {
+  runScan,
+  determineUnifiedExitCode,
+  type ScanCommandOptions,
+  type UnifiedScanResult,
+  type UnifiedScanSummary,
+  type ScannerStatusSummary,
+  type ScannerExecutionStatus
+} from './cli/commands/scan.js';
+export {
   runSecurityDeps,
+  runSecuritySecrets,
   determineExitCode,
+  determineSecretExitCode,
   CLI_EXIT_CODES,
   type CliExitCode,
-  type SecurityDepsCommandOptions
+  type SecurityDepsCommandOptions,
+  type SecuritySecretsCommandOptions
 } from './cli/commands/security.js';
+
+export {
+  scanSecrets,
+  scanFileForSecrets,
+  createSecretFinding,
+  computeSecretScanStatus,
+  BUILT_IN_RULES,
+  evaluateLineRules,
+  maskSecret,
+  redactSecretFromLine,
+  redactPrivateKeyBlocks,
+  calculateShannonEntropy,
+  crawlProjectFiles,
+  type SecretCategory,
+  type SkippedFileReason,
+  type SkippedFileRecord,
+  type SecretRule,
+  type SecretMatchContext,
+  type SecretMatch,
+  type SecretScanStatus,
+  type SecretScanSummary,
+  type SecretScanResult,
+  type SecretScanOptions,
+  type FileCrawlerOptions,
+  type CrawlResult
+} from './scanners/secret/index.js';
+
+export {
+  scanSast,
+  computeSastScanStatus,
+  parseSourceCode,
+  getScriptKindForPath,
+  ImportTracker,
+  ScopeTracker,
+  analyzeSourceFile,
+  BUILT_IN_SAST_RULES,
+  RULE_SEC_SAST_EVAL,
+  RULE_SEC_SAST_REACT_DANGEROUS_HTML,
+  RULE_SEC_SAST_COMMAND_INJECTION,
+  type SastRule,
+  type SastRuleContext,
+  type SastFindingCandidate,
+  type SastScanOptions,
+  type SastScanSummary,
+  type SastScanResult,
+  type SastScanStatus,
+  type ParseResult,
+  type ResolvedImport
+} from './scanners/sast/index.js';
