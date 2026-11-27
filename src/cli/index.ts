@@ -16,7 +16,9 @@ export function createProgram(): Command {
     .description(
       `${chalk.cyan.bold('DevPilot Security')} — Developer security toolkit for modern applications`
     )
-    .version(getDevPilotVersion(), '-v, --version', 'Displays the current CLI version');
+    .version(getDevPilotVersion(), '-v, --version', 'Displays the current CLI version')
+    .option('--no-color', 'Disable colored terminal output')
+    .option('--no-animation', 'Disable animated spinners and dynamic terminal rendering');
 
   program.configureHelp({
     formatHelp: (cmd) => {
@@ -88,6 +90,8 @@ export function createProgram(): Command {
     .command('scan [path]')
     .description('Run unified security scan across project dependencies and source files')
     .option('--json', 'Output scan results as machine-readable JSON')
+    .option('--no-color', 'Disable colored terminal output')
+    .option('--no-animation', 'Disable animated spinners and dynamic terminal rendering')
     .addHelpText(
       'after',
       `
@@ -108,6 +112,8 @@ Examples:
     .command('deps [path]')
     .description('Scan project dependencies for known security vulnerabilities via OSV')
     .option('--json', 'Output scan results as machine-readable JSON')
+    .option('--no-color', 'Disable colored terminal output')
+    .option('--no-animation', 'Disable animated spinners and dynamic terminal rendering')
     .action(async (targetPath?: string, options?: { json?: boolean }) => {
       await runSecurityDeps(targetPath, options);
     });
@@ -116,6 +122,8 @@ Examples:
     .command('secrets [path]')
     .description('Scan project files for hardcoded secrets, API keys, and credentials')
     .option('--json', 'Output scan results as machine-readable JSON')
+    .option('--no-color', 'Disable colored terminal output')
+    .option('--no-animation', 'Disable animated spinners and dynamic terminal rendering')
     .action(async (targetPath?: string, options?: { json?: boolean }) => {
       await runSecuritySecrets(targetPath, options);
     });
@@ -124,6 +132,8 @@ Examples:
     .command('sast [path]')
     .description('Scan source code for static application security vulnerabilities')
     .option('--json', 'Output scan results as machine-readable JSON')
+    .option('--no-color', 'Disable colored terminal output')
+    .option('--no-animation', 'Disable animated spinners and dynamic terminal rendering')
     .action(async (targetPath?: string, options?: { json?: boolean }) => {
       await runSecuritySast(targetPath, options);
     });

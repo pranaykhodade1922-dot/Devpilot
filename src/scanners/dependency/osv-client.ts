@@ -57,7 +57,19 @@ export class OsvClient {
    * and bounded concurrency.
    */
   public async queryDependencies(
-    dependencies: Array<{ name: string; version: string }>
+    dependencies: Array<{ name: string; version: string }>,
+    progressHooks?: {
+      onBatchProgress?: (params: {
+        completedBatches: number;
+        totalBatches: number;
+        completedQueries: number;
+        totalQueries: number;
+      }) => void;
+      onHydrateProgress?: (params: {
+        completedAdvisories: number;
+        totalAdvisories: number;
+      }) => void;
+    }
   ): Promise<{
     resultsMap: Map<string, OsvVulnerability[]>;
     hasIncompleteAdvisories: boolean;
@@ -95,6 +107,10 @@ export class OsvClient {
     const rawStubsMap = new Map<string, OsvVulnerability[]>();
     const allVulnIdsToHydrate = new Set<string>();
 
+    const totalBatches = Math.ceil(uniqueQueries.length / this.batchSize);
+    let completedBatches = 0;
+    let completedQueries = 0;
+
     for (let i = 0; i < uniqueQueries.length; i += this.batchSize) {
       const batchQueries = uniqueQueries.slice(i, i + this.batchSize);
       const batchKeys = uniqueKeys.slice(i, i + this.batchSize);
@@ -114,11 +130,26 @@ export class OsvClient {
           }
         }
       }
+
+      completedBatches++;
+      completedQueries += batchQueries.length;
+
+      try {
+        progressHooks?.onBatchProgress?.({
+          completedBatches,
+          totalBatches,
+          completedQueries,
+          totalQueries: uniqueQueries.length
+        });
+      } catch {
+        // Callback errors must never interrupt query execution
+      }
     }
 
     // 3. Hydrate full advisory records for all candidate IDs with concurrency control
     const { hydratedMap, hasIncompleteAdvisories } = await this.hydrateAdvisories(
-      Array.from(allVulnIdsToHydrate)
+      Array.from(allVulnIdsToHydrate),
+      progressHooks?.onHydrateProgress
     );
 
     // 4. Map hydrated full advisories back to package queries
@@ -194,7 +225,8 @@ export class OsvClient {
    * Hydrates a set of vulnerability IDs into full advisory records with bounded concurrency.
    */
   private async hydrateAdvisories(
-    ids: string[]
+    ids: string[],
+    onHydrateProgress?: (params: { completedAdvisories: number; totalAdvisories: number }) => void
   ): Promise<{ hydratedMap: Map<string, OsvVulnerability>; hasIncompleteAdvisories: boolean }> {
     const hydratedMap = new Map<string, OsvVulnerability>();
     let hasIncompleteAdvisories = false;
@@ -206,6 +238,8 @@ export class OsvClient {
     // Process in bounded concurrency pools
     const poolLimit = Math.max(1, this.concurrency);
     const queue = [...ids];
+    const totalAdvisories = ids.length;
+    let completedAdvisories = 0;
 
     const worker = async () => {
       while (queue.length > 0) {
@@ -217,6 +251,16 @@ export class OsvClient {
           hydratedMap.set(id, advisory);
         } else {
           hasIncompleteAdvisories = true;
+        }
+
+        completedAdvisories++;
+        try {
+          onHydrateProgress?.({
+            completedAdvisories,
+            totalAdvisories
+          });
+        } catch {
+          // Callback errors must never interrupt query execution
         }
       }
     };

@@ -10,6 +10,9 @@ import type {
 } from '../../scanners/secret/types.js';
 import { scanSast } from '../../scanners/sast/sast-scanner.js';
 import type { SastScanResult, SastScanSummary } from '../../scanners/sast/types.js';
+import { formatBanner } from '../ui/formatters.js';
+import { ProgressCoordinator } from '../ui/progress-coordinator.js';
+import { shouldUseColor } from '../ui/terminal.js';
 
 export interface SecurityDepsCommandOptions {
   json?: boolean;
@@ -93,7 +96,31 @@ export async function runSecurityDeps(
   targetPath?: string,
   options: SecurityDepsCommandOptions = {}
 ): Promise<DependencyScanResult> {
-  const result = await scanDependencies({ cwd: targetPath });
+  const isJson = Boolean(options.json);
+  const resolvedTarget = targetPath ? path.resolve(targetPath) : process.cwd();
+
+  if (!isJson) {
+    console.log();
+    console.log(formatBanner({ targetPath: resolvedTarget, color: shouldUseColor() }));
+    console.log();
+  }
+
+  const coordinator = new ProgressCoordinator({
+    silent: isJson,
+    enabledScanners: ['dependency']
+  });
+  coordinator.start();
+
+  let result: DependencyScanResult;
+  try {
+    result = await scanDependencies({
+      cwd: targetPath,
+      onProgress: (evt) => coordinator.onDependencyProgress(evt)
+    });
+  } finally {
+    coordinator.stop();
+  }
+
   const exitCode = determineExitCode(result.summary);
 
   if (options.json) {
@@ -278,7 +305,31 @@ export async function runSecuritySecrets(
   targetPath?: string,
   options: SecuritySecretsCommandOptions = {}
 ): Promise<SecretScanResult> {
-  const result = await scanSecrets({ cwd: targetPath });
+  const isJson = Boolean(options.json);
+  const resolvedTarget = targetPath ? path.resolve(targetPath) : process.cwd();
+
+  if (!isJson) {
+    console.log();
+    console.log(formatBanner({ targetPath: resolvedTarget, color: shouldUseColor() }));
+    console.log();
+  }
+
+  const coordinator = new ProgressCoordinator({
+    silent: isJson,
+    enabledScanners: ['secret']
+  });
+  coordinator.start();
+
+  let result: SecretScanResult;
+  try {
+    result = await scanSecrets({
+      cwd: targetPath,
+      onProgress: (evt) => coordinator.onSecretProgress(evt)
+    });
+  } finally {
+    coordinator.stop();
+  }
+
   const exitCode = determineSecretExitCode(result.summary);
 
   if (options.json) {
@@ -288,7 +339,6 @@ export async function runSecuritySecrets(
   }
 
   const { summary, findings } = result;
-  const resolvedTarget = targetPath ? path.resolve(targetPath) : process.cwd();
 
   console.log();
   console.log(chalk.bold.cyan(' DevPilot Security — Secret Scanner'));
@@ -436,7 +486,31 @@ export async function runSecuritySast(
   targetPath?: string,
   options: SecuritySastCommandOptions = {}
 ): Promise<SastScanResult> {
-  const result = await scanSast({ cwd: targetPath });
+  const isJson = Boolean(options.json);
+  const resolvedTarget = targetPath ? path.resolve(targetPath) : process.cwd();
+
+  if (!isJson) {
+    console.log();
+    console.log(formatBanner({ targetPath: resolvedTarget, color: shouldUseColor() }));
+    console.log();
+  }
+
+  const coordinator = new ProgressCoordinator({
+    silent: isJson,
+    enabledScanners: ['sast']
+  });
+  coordinator.start();
+
+  let result: SastScanResult;
+  try {
+    result = await scanSast({
+      cwd: targetPath,
+      onProgress: (evt) => coordinator.onSastProgress(evt)
+    });
+  } finally {
+    coordinator.stop();
+  }
+
   const exitCode = determineSastExitCode(result.summary);
 
   if (options.json) {

@@ -11,6 +11,7 @@ import { parsePackageLock } from './lockfile-parser.js';
 import { OsvClient } from './osv-client.js';
 import { evaluateAffectedStatus, normalizeSemver } from './semver-matcher.js';
 import type {
+  DependencyProgressEvent,
   DependencyScanOptions,
   DependencyScanResult,
   DependencyScanSummary,
@@ -397,6 +398,23 @@ export function deduplicateFindings(findings: SecurityFinding[]): SecurityFindin
 }
 
 /**
+ * Safely emits a dependency scanner progress event.
+ * Exceptions inside consumer callbacks are caught and swallowed to guarantee
+ * scanner stability and accurate exit code execution.
+ */
+function safeEmitProgress(
+  onProgress: ((event: DependencyProgressEvent) => void) | undefined,
+  event: DependencyProgressEvent
+): void {
+  if (!onProgress) return;
+  try {
+    onProgress(event);
+  } catch {
+    // Isolated: callback failure must never disrupt scanner or alter findings
+  }
+}
+
+/**
  * Scans installed npm dependencies for vulnerabilities using package-lock.json and OSV.
  * Read-only and non-destructive.
  */
@@ -414,12 +432,37 @@ export async function scanDependencies(
     UNKNOWN: 0
   };
 
+  safeEmitProgress(options.onProgress, {
+    stage: 'discovery',
+    status: 'started',
+    message: 'Locating and parsing lockfile...'
+  });
+
   // 1. Locate and parse lockfile
   const lockfilePath = options.lockfilePath ?? targetDir;
   const parseResult = parsePackageLock(lockfilePath);
 
   if (!parseResult.success) {
     const durationMs = Date.now() - startTime;
+    safeEmitProgress(options.onProgress, {
+      stage: 'discovery',
+      status: 'failed',
+      message: parseResult.error ?? 'Lockfile discovery/parsing failed',
+      metadata: {
+        errorMessage: parseResult.error,
+        durationMs
+      }
+    });
+    safeEmitProgress(options.onProgress, {
+      stage: 'completed',
+      status: 'failed',
+      message: 'Dependency scan failed',
+      metadata: {
+        totalDependencies: 0,
+        errorMessage: parseResult.error,
+        durationMs
+      }
+    });
     return {
       summary: {
         totalDependencies: 0,
@@ -441,9 +484,37 @@ export async function scanDependencies(
   const dependencies = parseResult.dependencies;
   const uniquePackageNames = new Set(dependencies.map((d) => d.name));
 
+  safeEmitProgress(options.onProgress, {
+    stage: 'discovery',
+    status: 'completed',
+    completed: dependencies.length,
+    total: dependencies.length,
+    message: `Discovered ${dependencies.length} installed dependencies (${uniquePackageNames.size} unique packages)`,
+    metadata: {
+      totalDependencies: dependencies.length,
+      uniquePackages: uniquePackageNames.size,
+      directCount: parseResult.directCount,
+      transitiveCount: parseResult.transitiveCount
+    }
+  });
+
   // If dependency tree is empty, return clean scan
   if (dependencies.length === 0) {
     const durationMs = Date.now() - startTime;
+    safeEmitProgress(options.onProgress, {
+      stage: 'completed',
+      status: 'completed',
+      outcome: 'clean',
+      message: 'No dependencies found to scan',
+      metadata: {
+        totalDependencies: 0,
+        uniquePackages: 0,
+        directCount: 0,
+        transitiveCount: 0,
+        findingsCount: 0,
+        durationMs
+      }
+    });
     return {
       summary: {
         totalDependencies: 0,
@@ -470,15 +541,80 @@ export async function scanDependencies(
     fetchFn: options.fetchFn
   });
 
+  safeEmitProgress(options.onProgress, {
+    stage: 'querying',
+    status: 'started',
+    message: `Querying OSV database for ${uniquePackageNames.size} packages...`,
+    metadata: {
+      totalDependencies: dependencies.length,
+      uniquePackages: uniquePackageNames.size
+    }
+  });
+
   let osvResults: Map<string, OsvVulnerability[]>;
   let hasIncompleteAdvisories = false;
 
   try {
-    const queryRes = await osvClient.queryDependencies(dependencies);
+    const queryRes = await osvClient.queryDependencies(dependencies, {
+      onBatchProgress: ({ completedBatches, totalBatches, completedQueries, totalQueries }) => {
+        safeEmitProgress(options.onProgress, {
+          stage: 'querying',
+          status: 'progress',
+          completed: completedBatches,
+          total: totalBatches,
+          message: `Querying OSV batches (${completedBatches}/${totalBatches})...`,
+          metadata: {
+            batchesCompleted: completedBatches,
+            totalBatches,
+            queriesCompleted: completedQueries,
+            totalQueries
+          }
+        });
+      },
+      onHydrateProgress: ({ completedAdvisories, totalAdvisories }) => {
+        safeEmitProgress(options.onProgress, {
+          stage: 'hydrating',
+          status: 'progress',
+          completed: completedAdvisories,
+          total: totalAdvisories,
+          message: `Hydrating vulnerability details (${completedAdvisories}/${totalAdvisories})...`,
+          metadata: {
+            advisoriesHydrated: completedAdvisories,
+            totalAdvisories
+          }
+        });
+      }
+    });
     osvResults = queryRes.resultsMap;
     hasIncompleteAdvisories = queryRes.hasIncompleteAdvisories;
+
+    safeEmitProgress(options.onProgress, {
+      stage: 'querying',
+      status: 'completed',
+      message: 'OSV querying completed'
+    });
   } catch (err) {
     const durationMs = Date.now() - startTime;
+    const errMsg = err instanceof Error ? err.message : String(err);
+    safeEmitProgress(options.onProgress, {
+      stage: 'querying',
+      status: 'failed',
+      message: errMsg,
+      metadata: {
+        errorMessage: errMsg,
+        durationMs
+      }
+    });
+    safeEmitProgress(options.onProgress, {
+      stage: 'completed',
+      status: 'failed',
+      message: 'Dependency scan failed during OSV query',
+      metadata: {
+        totalDependencies: dependencies.length,
+        errorMessage: errMsg,
+        durationMs
+      }
+    });
     return {
       summary: {
         totalDependencies: dependencies.length,
@@ -489,7 +625,7 @@ export async function scanDependencies(
         findingsCount: 0,
         severityCounts,
         scanStatus: 'FAILED',
-        errorMessage: err instanceof Error ? err.message : String(err),
+        errorMessage: errMsg,
         durationMs
       },
       findings: [],
@@ -498,6 +634,12 @@ export async function scanDependencies(
   }
 
   // 3. Match vulnerabilities to installed instances with Semver Range Validation
+  safeEmitProgress(options.onProgress, {
+    stage: 'evaluating',
+    status: 'started',
+    message: 'Evaluating vulnerability ranges and severities...'
+  });
+
   const rawFindings: SecurityFinding[] = [];
   const vulnerablePackageKeys = new Set<string>();
 
@@ -555,6 +697,12 @@ export async function scanDependencies(
     return a.packageName.localeCompare(b.packageName);
   });
 
+  safeEmitProgress(options.onProgress, {
+    stage: 'evaluating',
+    status: 'completed',
+    message: 'Evaluation completed'
+  });
+
   const durationMs = Date.now() - startTime;
   let scanStatus: 'CLEAN' | 'VULNERABLE' | 'PARTIAL' = 'CLEAN';
   if (findings.length > 0) {
@@ -575,6 +723,30 @@ export async function scanDependencies(
     hasIncompleteAdvisories,
     durationMs
   };
+
+  const terminalLifecycleStatus: 'completed' | 'partial' =
+    scanStatus === 'PARTIAL' ? 'partial' : 'completed';
+
+  const terminalOutcome: 'clean' | 'vulnerable' | undefined =
+    findings.length > 0
+      ? 'vulnerable'
+      : scanStatus === 'PARTIAL'
+        ? undefined
+        : 'clean';
+
+  safeEmitProgress(options.onProgress, {
+    stage: 'completed',
+    status: terminalLifecycleStatus,
+    outcome: terminalOutcome,
+    message: `Scan finished with status: ${scanStatus}`,
+    metadata: {
+      totalDependencies: dependencies.length,
+      uniquePackages: uniquePackageNames.size,
+      vulnerableDependencies: vulnerablePackageKeys.size,
+      findingsCount: findings.length,
+      durationMs
+    }
+  });
 
   return {
     summary,

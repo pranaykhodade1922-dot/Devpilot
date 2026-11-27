@@ -103,6 +103,48 @@ export interface OsvBatchResponse {
 
 export type DependencyScanStatus = 'CLEAN' | 'VULNERABLE' | 'PARTIAL' | 'FAILED';
 
+export type ScannerProgressStatus =
+  | 'started'
+  | 'progress'
+  | 'completed'
+  | 'failed'
+  | 'skipped'
+  | 'partial';
+
+export type ScannerScanOutcome = 'clean' | 'vulnerable';
+
+export type DependencyProgressStage =
+  | 'discovery'
+  | 'querying'
+  | 'hydrating'
+  | 'evaluating'
+  | 'completed';
+
+export interface DependencyProgressEvent {
+  stage: DependencyProgressStage;
+  status: ScannerProgressStatus;
+  outcome?: ScannerScanOutcome;
+  completed?: number;
+  total?: number;
+  message?: string;
+  metadata?: {
+    totalDependencies?: number;
+    uniquePackages?: number;
+    directCount?: number;
+    transitiveCount?: number;
+    batchesCompleted?: number;
+    totalBatches?: number;
+    queriesCompleted?: number;
+    totalQueries?: number;
+    advisoriesHydrated?: number;
+    totalAdvisories?: number;
+    vulnerableDependencies?: number;
+    findingsCount?: number;
+    durationMs?: number;
+    errorMessage?: string;
+  };
+}
+
 export interface DependencyScanSummary {
   totalDependencies: number;
   uniquePackages: number;
@@ -131,4 +173,5 @@ export interface DependencyScanOptions {
   batchSize?: number;
   concurrency?: number;
   fetchFn?: typeof fetch;
+  onProgress?: (event: DependencyProgressEvent) => void;
 }

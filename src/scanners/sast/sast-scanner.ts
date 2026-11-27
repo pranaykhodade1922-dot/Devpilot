@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { SecurityFinding, SeverityLevel } from '../../core/finding.js';
 import type {
+  SastProgressEvent,
   SastScanOptions,
   SastScanResult,
   SastScanSummary,
@@ -47,12 +48,35 @@ export function computeSastScanStatus(
 }
 
 /**
+ * Safely emits a SAST scanner progress event.
+ * Exceptions inside consumer callbacks are caught and swallowed to guarantee
+ * scanner stability and accurate exit code execution.
+ */
+function safeEmitProgress(
+  onProgress: ((event: SastProgressEvent) => void) | undefined,
+  event: SastProgressEvent
+): void {
+  if (!onProgress) return;
+  try {
+    onProgress(event);
+  } catch {
+    // Isolated: callback failure must never disrupt scanner or alter findings
+  }
+}
+
+/**
  * Executes static application security testing across a target project.
  */
 export async function scanSast(options: SastScanOptions = {}): Promise<SastScanResult> {
   const startTime = Date.now();
   const rootDir = path.resolve(options.cwd ?? process.cwd());
   const rules = options.customRules ?? BUILT_IN_SAST_RULES;
+
+  safeEmitProgress(options.onProgress, {
+    stage: 'discovery',
+    status: 'started',
+    message: 'Discovering source files for SAST analysis...'
+  });
 
   // 1. Crawl eligible files
   const crawl = await crawlProjectFiles({
@@ -67,6 +91,32 @@ export async function scanSast(options: SastScanOptions = {}): Promise<SastScanR
     crawl.errorSkipped.length > 0 &&
     crawl.errorSkipped.some((s) => s.filePath === rootDir)
   ) {
+    const errorRecord = crawl.errorSkipped.find((s) => s.filePath === rootDir);
+    const durationMs = Date.now() - startTime;
+    const errMsg = errorRecord?.details ?? 'Target path could not be accessed';
+
+    safeEmitProgress(options.onProgress, {
+      stage: 'discovery',
+      status: 'failed',
+      message: errMsg,
+      metadata: {
+        errorMessage: errMsg,
+        errorSkippedCount: crawl.errorSkipped.length,
+        durationMs
+      }
+    });
+
+    safeEmitProgress(options.onProgress, {
+      stage: 'completed',
+      status: 'failed',
+      message: 'SAST scan failed during file discovery',
+      metadata: {
+        errorMessage: errMsg,
+        errorSkippedCount: crawl.errorSkipped.length,
+        durationMs
+      }
+    });
+
     return {
       summary: {
         totalFilesScanned: 0,
@@ -77,7 +127,7 @@ export async function scanSast(options: SastScanOptions = {}): Promise<SastScanR
         skippedFiles: crawl.errorSkipped,
         errorSkippedCount: crawl.errorSkipped.length,
         intentionalSkippedCount: 0,
-        durationMs: Date.now() - startTime
+        durationMs
       },
       findings: []
     };
@@ -89,12 +139,78 @@ export async function scanSast(options: SastScanOptions = {}): Promise<SastScanR
     return SAST_TARGET_EXTENSIONS.has(ext);
   });
 
+  safeEmitProgress(options.onProgress, {
+    stage: 'discovery',
+    status: 'completed',
+    completed: sastFiles.length,
+    total: sastFiles.length,
+    message: `Discovered ${sastFiles.length} JavaScript/TypeScript source files (${crawl.eligibleFiles.length} eligible project files)`,
+    metadata: {
+      eligibleFilesCount: crawl.eligibleFiles.length,
+      sastFilesCount: sastFiles.length,
+      errorSkippedCount: crawl.errorSkipped.length,
+      intentionalSkippedCount: crawl.intentionallyExcluded.length
+    }
+  });
+
+  if (sastFiles.length === 0) {
+    const skippedFiles: SkippedFileRecord[] = [...crawl.intentionallyExcluded, ...crawl.errorSkipped];
+    const errorSkippedCount = skippedFiles.filter((s) => !s.isIntentionallyExcluded).length;
+    const intentionalSkippedCount = skippedFiles.filter((s) => s.isIntentionallyExcluded).length;
+    const durationMs = Date.now() - startTime;
+    const scanStatus = computeSastScanStatus(0, false, errorSkippedCount);
+
+    safeEmitProgress(options.onProgress, {
+      stage: 'completed',
+      status: scanStatus === 'PARTIAL' ? 'partial' : 'completed',
+      outcome: scanStatus === 'PARTIAL' ? undefined : 'clean',
+      message: 'No JavaScript/TypeScript source files found to scan',
+      metadata: {
+        eligibleFilesCount: crawl.eligibleFiles.length,
+        sastFilesCount: 0,
+        processedFilesCount: 0,
+        linesExamined: 0,
+        findingsCount: 0,
+        errorSkippedCount,
+        intentionalSkippedCount,
+        durationMs
+      }
+    });
+
+    return {
+      summary: {
+        totalFilesScanned: 0,
+        totalLinesScanned: 0,
+        findingsCount: 0,
+        severityCounts: { CRITICAL: 0, HIGH: 0, MODERATE: 0, LOW: 0, UNKNOWN: 0 },
+        scanStatus,
+        skippedFiles,
+        errorSkippedCount,
+        intentionalSkippedCount,
+        hasSyntaxErrors: false,
+        durationMs
+      },
+      findings: []
+    };
+  }
+
+  safeEmitProgress(options.onProgress, {
+    stage: 'analyzing',
+    status: 'started',
+    total: sastFiles.length,
+    message: `Analyzing ${sastFiles.length} AST source trees...`,
+    metadata: {
+      sastFilesCount: sastFiles.length
+    }
+  });
+
   const allFindings: SecurityFinding[] = [];
   const skippedFiles: SkippedFileRecord[] = [...crawl.intentionallyExcluded, ...crawl.errorSkipped];
   let totalLines = 0;
   let hasSyntaxErrors = false;
 
-  for (const filePath of sastFiles) {
+  for (let idx = 0; idx < sastFiles.length; idx++) {
+    const filePath = sastFiles[idx]!;
     const relPath = path.relative(rootDir, filePath).replace(/\\/g, '/');
     let content: string;
 
@@ -135,7 +251,31 @@ export async function scanSast(options: SastScanOptions = {}): Promise<SastScanR
     });
 
     allFindings.push(...fileFindings);
+
+    safeEmitProgress(options.onProgress, {
+      stage: 'analyzing',
+      status: 'progress',
+      completed: idx + 1,
+      total: sastFiles.length,
+      message: `Analyzing: ${relPath}`,
+      metadata: {
+        currentFile: relPath,
+        sastFilesCount: sastFiles.length,
+        processedFilesCount: idx + 1,
+        linesExamined: totalLines,
+        hasSyntaxErrors: parseResult.hasErrors,
+        findingsCount: allFindings.length
+      }
+    });
   }
+
+  safeEmitProgress(options.onProgress, {
+    stage: 'analyzing',
+    status: 'completed',
+    completed: sastFiles.length,
+    total: sastFiles.length,
+    message: `Analyzed ${sastFiles.length} files (${totalLines} lines)`
+  });
 
   const severityCounts: Record<SeverityLevel, number> = {
     CRITICAL: 0,
@@ -158,6 +298,8 @@ export async function scanSast(options: SastScanOptions = {}): Promise<SastScanR
     errorSkippedCount
   );
 
+  const durationMs = Date.now() - startTime;
+
   const summary: SastScanSummary = {
     totalFilesScanned: sastFiles.length,
     totalLinesScanned: totalLines,
@@ -168,8 +310,35 @@ export async function scanSast(options: SastScanOptions = {}): Promise<SastScanR
     errorSkippedCount,
     intentionalSkippedCount,
     hasSyntaxErrors,
-    durationMs: Date.now() - startTime
+    durationMs
   };
+
+  const terminalLifecycleStatus: 'completed' | 'partial' =
+    scanStatus === 'PARTIAL' ? 'partial' : 'completed';
+
+  const terminalOutcome: 'clean' | 'vulnerable' | undefined =
+    allFindings.length > 0
+      ? 'vulnerable'
+      : scanStatus === 'PARTIAL'
+        ? undefined
+        : 'clean';
+
+  safeEmitProgress(options.onProgress, {
+    stage: 'completed',
+    status: terminalLifecycleStatus,
+    outcome: terminalOutcome,
+    message: `SAST scan completed with status: ${scanStatus}`,
+    metadata: {
+      sastFilesCount: sastFiles.length,
+      processedFilesCount: sastFiles.length,
+      linesExamined: totalLines,
+      hasSyntaxErrors,
+      findingsCount: allFindings.length,
+      errorSkippedCount,
+      intentionalSkippedCount,
+      durationMs
+    }
+  });
 
   return {
     summary,

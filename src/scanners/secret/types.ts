@@ -149,6 +149,28 @@ export interface SecretMatch {
  */
 export type SecretScanStatus = 'CLEAN' | 'VULNERABLE' | 'PARTIAL' | 'FAILED';
 
+export type SecretProgressStage = 'discovery' | 'scanning' | 'completed';
+
+export interface SecretProgressEvent {
+  stage: SecretProgressStage;
+  status: 'started' | 'progress' | 'completed' | 'failed' | 'skipped' | 'partial';
+  outcome?: 'clean' | 'vulnerable';
+  completed?: number;
+  total?: number;
+  message?: string;
+  metadata?: {
+    currentFile?: string; // Relative path only, never absolute
+    eligibleFilesCount?: number;
+    processedFilesCount?: number;
+    linesExamined?: number;
+    findingsCount?: number;
+    errorSkippedCount?: number;
+    intentionalSkippedCount?: number;
+    durationMs?: number;
+    errorMessage?: string;
+  };
+}
+
 /**
  * Summary metrics of a secret scan.
  */
@@ -195,4 +217,6 @@ export interface SecretScanOptions {
   customRules?: SecretRule[];
   /** Whether to respect .gitignore rules (defaults to true) */
   respectGitignore?: boolean;
+  /** Optional callback for real-time progress events */
+  onProgress?: (event: SecretProgressEvent) => void;
 }

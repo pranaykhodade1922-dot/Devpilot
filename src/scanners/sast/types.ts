@@ -4,6 +4,30 @@ import type { SkippedFileRecord } from '../secret/types.js';
 
 export type SastScanStatus = 'CLEAN' | 'VULNERABLE' | 'PARTIAL' | 'FAILED';
 
+export type SastProgressStage = 'discovery' | 'analyzing' | 'completed';
+
+export interface SastProgressEvent {
+  stage: SastProgressStage;
+  status: 'started' | 'progress' | 'completed' | 'failed' | 'skipped' | 'partial';
+  outcome?: 'clean' | 'vulnerable';
+  completed?: number;
+  total?: number;
+  message?: string;
+  metadata?: {
+    currentFile?: string; // Relative path only, never absolute
+    eligibleFilesCount?: number;
+    sastFilesCount?: number;
+    processedFilesCount?: number;
+    linesExamined?: number;
+    hasSyntaxErrors?: boolean;
+    findingsCount?: number;
+    errorSkippedCount?: number;
+    intentionalSkippedCount?: number;
+    durationMs?: number;
+    errorMessage?: string;
+  };
+}
+
 export interface SastFindingCandidate {
   node: ts.Node;
   severity?: SeverityLevel;
@@ -58,4 +82,5 @@ export interface SastScanOptions {
   maxFileSize?: number;
   respectGitignore?: boolean;
   customRules?: SastRule[];
+  onProgress?: (event: SastProgressEvent) => void;
 }

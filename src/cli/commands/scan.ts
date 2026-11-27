@@ -14,6 +14,9 @@ import {
   CLI_EXIT_CODES,
   type CliExitCode
 } from './security.js';
+import { formatBanner } from '../ui/formatters.js';
+import { ProgressCoordinator } from '../ui/progress-coordinator.js';
+import { shouldUseColor } from '../ui/terminal.js';
 
 export type ScannerExecutionStatus =
   | 'COMPLETED'
@@ -111,6 +114,20 @@ export async function runScan(
 ): Promise<UnifiedScanResult> {
   const startTime = Date.now();
   const targetDir = path.resolve(targetPath ?? process.cwd());
+  const isJson = Boolean(options.json);
+
+  // In non-JSON mode, display startup banner and initialize progress coordinator
+  if (!isJson) {
+    console.log();
+    console.log(formatBanner({ targetPath: targetDir, color: shouldUseColor() }));
+    console.log();
+  }
+
+  const coordinator = new ProgressCoordinator({
+    silent: isJson,
+    enabledScanners: ['dependency', 'secret', 'sast']
+  });
+  coordinator.start();
 
   // 1. Detect project metadata
   const project = detectProject({ cwd: targetDir });
@@ -124,9 +141,13 @@ export async function runScan(
   if (!project.packageJsonExists) {
     depStatus = 'SKIPPED';
     depMessage = 'No package.json detected in project';
+    coordinator.markSkipped('dependency', depMessage);
   } else {
     try {
-      depResult = await scanDependencies({ cwd: targetDir });
+      depResult = await scanDependencies({
+        cwd: targetDir,
+        onProgress: (evt) => coordinator.onDependencyProgress(evt)
+      });
       if (depResult.summary.scanStatus === 'FAILED') {
         depStatus = 'FAILED';
         depMessage = depResult.summary.errorMessage ?? 'Dependency scan failed';
@@ -150,7 +171,10 @@ export async function runScan(
   const secStart = Date.now();
 
   try {
-    secResult = await scanSecrets({ cwd: targetDir });
+    secResult = await scanSecrets({
+      cwd: targetDir,
+      onProgress: (evt) => coordinator.onSecretProgress(evt)
+    });
     if (secResult.summary.scanStatus === 'FAILED') {
       secStatus = 'FAILED';
       secMessage = secResult.summary.errorMessage ?? 'Secret scan failed';
@@ -173,7 +197,10 @@ export async function runScan(
   const sastStart = Date.now();
 
   try {
-    sastResult = await scanSast({ cwd: targetDir });
+    sastResult = await scanSast({
+      cwd: targetDir,
+      onProgress: (evt) => coordinator.onSastProgress(evt)
+    });
     if (sastResult.summary.scanStatus === 'FAILED') {
       sastStatus = 'FAILED';
       sastMessage = 'SAST scanner failed to analyze source files';
@@ -188,6 +215,8 @@ export async function runScan(
     sastMessage = err instanceof Error ? err.message : String(err);
   }
   const sastDurationMs = Date.now() - sastStart;
+
+  coordinator.stop();
 
   // 5. Combine and sort findings across all active scanners
   const depFindings = depResult?.findings ?? [];
