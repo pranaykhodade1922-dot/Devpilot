@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Test (${{ matrix.os }} - Node ${{ matrix.node-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [22.x, 24.x, 26.x]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Run unit and integration tests
+        run: npm test
+
+      - name: Build distribution package
+        run: npm run build
+
+      - name: Smoke test CLI --version
+        run: node dist/cli/index.js --version
+
+      - name: Smoke test CLI --help
+        run: node dist/cli/index.js --help
+
+      - name: Smoke test CLI about
+        run: node dist/cli/index.js about
+
+  package-artifact:
+    name: Build Distribution Tarball
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build distribution package
+        run: npm run build
+
+      - name: Pack distribution tarball
+        run: npm pack
+
+      - name: Upload distribution tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: distribution-package
+          path: '*.tgz'
+          retention-days: 1
+
+  node18-runtime-smoke:
+    name: Runtime Compatibility (ubuntu-latest - Node 18.x)
+    needs: package-artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Node.js 18.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+
+      - name: Download distribution tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: distribution-package
+          path: dist-tarball
+
+      - name: Verify Node.js 18 runtime consumer installation
+        run: |
+          mkdir -p "$RUNNER_TEMP/consumer-app"
+          cd "$RUNNER_TEMP/consumer-app"
+          npm init -y
+          TARBALL=$(ls "$GITHUB_WORKSPACE"/dist-tarball/*.tgz)
+          echo "Installing package tarball: $TARBALL"
+          npm install "$TARBALL"
+          echo "Verifying CLI binary on Node.js 18..."
+          npx devpilot --version
+          npx devpilot --help
+          npx devpilot about
+
+      - name: Verify Node.js 18 SAST scanner execution on fixtures
+        run: |
+          cd "$RUNNER_TEMP/consumer-app"
+
+          # 1. Create clean fixture outside repository
+          CLEAN_DIR="$RUNNER_TEMP/fixtures/clean"
+          mkdir -p "$CLEAN_DIR"
+          echo '{"name": "clean-fixture", "version": "1.0.0"}' > "$CLEAN_DIR/package.json"
+          echo 'console.log("Safe and clean code");' > "$CLEAN_DIR/safe.js"
+
+          # 2. Run SAST against clean fixture (expected exit code: 0)
+          echo "Scanning clean fixture with SAST on Node 18..."
+          npx devpilot security sast "$CLEAN_DIR"
+
+          # 3. Create vulnerable fixture outside repository
+          VULN_DIR="$RUNNER_TEMP/fixtures/vuln"
+          mkdir -p "$VULN_DIR"
+          echo '{"name": "vuln-fixture", "version": "1.0.0"}' > "$VULN_DIR/package.json"
+          echo 'const userInput = process.argv[2]; eval(userInput);' > "$VULN_DIR/vulnerable.js"
+
+          # 4. Run SAST against vulnerable fixture (expected exit code: 1, finding: SEC-SAST-EVAL)
+          echo "Scanning vulnerable fixture with SAST on Node 18..."
+          set +e
+          OUTPUT=$(npx devpilot security sast "$VULN_DIR" 2>&1)
+          VULN_EXIT_CODE=$?
+          set -e
+
+          echo "Vulnerable scan output:"
+          echo "$OUTPUT"
+
+          if [ "$VULN_EXIT_CODE" -ne 1 ]; then
+            echo "Error: Expected exit code 1 for vulnerable scan on Node 18, got $VULN_EXIT_CODE"
+            exit 1
+          fi
+
+          if ! echo "$OUTPUT" | grep -q "SEC-SAST-EVAL"; then
+            echo "Error: Expected SEC-SAST-EVAL finding in scan output"
+            exit 1
+          fi
+
+          echo "✔ Node 18 SAST scanner runtime smoke test passed successfully."

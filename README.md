@@ -1,205 +1,317 @@
 # DevPilot Security
 
-**DevPilot Security** is an open-source developer security toolkit designed to help engineering teams identify, understand, and address application security risks early in the software development lifecycle.
+[![npm version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://www.npmjs.com/package/devpilot-security)
+[![CI](https://github.com/pranaykhodade1922-dot/Devpilot/actions/workflows/ci.yml/badge.svg)](https://github.com/pranaykhodade1922-dot/Devpilot/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 
-The long-term workflow for DevPilot Security is:
+**Developer security toolkit for modern applications.**
 
-```
+**DevPilot Security** (`devpilot`) is a fast, local-first, developer-friendly command-line toolkit designed to help engineering teams identify, understand, and remediate application security risks early in the software development lifecycle.
+
+The core philosophy of DevPilot Security is:
+
+```text
 SCAN → UNDERSTAND → FIX → VERIFY → MONITOR
 ```
 
 ---
 
-## Getting Started
+## Why DevPilot Security?
 
-### The Primary Developer Command: `devpilot scan`
+Security tools often produce noisy, overwhelming alerts, slow down CI builds, or require uploading your proprietary code and credentials to third-party cloud servers.
 
-For most development and CI workflows, run the unified security scanner:
-
-```bash
-devpilot scan
-```
-
-The unified scan command automatically:
-1. **Detects the project**: Resolves language, framework, and package manager.
-2. **Audits dependencies**: Queries OSV for known vulnerabilities in installed packages.
-3. **Scans for secrets**: Analyzes project files locally for hardcoded API keys, tokens, and credentials.
-4. **Performs SAST analysis**: Parses JavaScript/TypeScript source code to detect high-risk patterns (SQL injection, XSS, command injection, dynamic evaluation, insecure HTTP, and weak cryptography).
-5. **Produces an aggregated report**: Combines and prioritizes all findings across all scanners by severity.
-
-```bash
-# Scan a specific directory
-devpilot scan ./my-project
-
-# Output machine-readable JSON
-devpilot scan --json
-```
+DevPilot Security is built with different principles:
+- **100% Local-First & Privacy Conscious**: Secret detection and AST-based code analysis run entirely on your local machine. Your code, tokens, and files are **never** uploaded to remote servers.
+- **Accurate & Noise-Reduced**: Employs Shannon entropy analysis, keyword pre-filtering, and false-positive reduction filters for secrets; leverages the TypeScript Compiler API with lexical scope tracking to eliminate shadowed variable false alarms.
+- **Unified Security Experience**: Scans dependencies, source-code secrets, and application logic in a single fast command (`devpilot scan`) with real progress indicators and consolidated findings.
+- **Actionable Remediation**: Every finding includes specific, practical remediation guidance and safe code alternatives, not just vague CVE descriptions.
+- **Automated CI/CD Ready**: Supports strict, predictable exit codes (`0`, `1`, `2`, `3`) and clean, unstyled machine-readable JSON output for effortless pipeline integration.
 
 ---
 
-## Combined Scan Report Example
+## Key Features
 
+- **Dependency Vulnerability Scanning**: Audits installed npm packages using `package-lock.json` and the Open Source Vulnerabilities (OSV.dev) database. Features semver range validation, CVSS v3.1 vector calculations, and non-breaking upgrade suggestions.
+- **Local Secret & Credential Detection**: Detects 10 categories of hardcoded credentials (AWS keys, GitHub tokens, GCP API keys, Slack webhooks, database connection strings, private key blocks, and high-entropy passwords). Includes strict in-memory masking and PEM block redaction.
+- **Static Application Security Testing (SAST)**: Analyzes JavaScript, TypeScript, JSX, TSX, MJS, and CJS source code using the TypeScript Compiler API. Detects command injection, SQL injection, DOM XSS, code evaluation, unsafe React HTML, unencrypted network requests, and weak cryptography.
+- **Branded Developer Terminal Experience**: Provides an interactive, non-flickering terminal UI with animated spinners on supported TTYs, clean discrete logs in CI/non-TTY environments, and automatic ASCII fallbacks on legacy consoles.
+- **Zero Configuration**: Automatically detects languages, frameworks (Express, React, Next.js, NestJS, etc.), and package managers without requiring YAML or JSON configuration files.
+
+---
+
+## Installation
+
+### Global Installation (Recommended for CLI use)
+
+Install DevPilot Security globally using npm:
+
+```bash
+npm install -g devpilot-security
 ```
- DevPilot Security Report
-──────────────────────────────────────────────────────────────────────
-Project:               my-app
-Project Root:          /path/to/my-app
-Language / Tech:       TypeScript (Express)
-Package Manager:       npm
-Scan Duration:         145ms
-──────────────────────────────────────────────────────────────────────
-Scanner Status:
-  Dependency Scanner:  Completed
-  Secret Scanner:      Completed
-  SAST Scanner:        Completed
-──────────────────────────────────────────────────────────────────────
-Total findings:        3
-──────────────────────────────────────────────────────────────────────
-Findings by Severity:
-   CRITICAL  2       HIGH    1     MODERATE  0       LOW     0     UNKNOWN   0
-──────────────────────────────────────────────────────────────────────
-Findings Details:
 
-1.  CRITICAL   SECRET  .env L4:C20
-   Issue:        SEC-AWS-001 — AWS Access Key ID detected in .env
-   Evidence:     AWS_ACCESS_KEY_ID="AKI...[REDACTED]...PLE"
-   Notes:        Secret value masked: AKI...[REDACTED]...PLE
-   Remediation:  Immediately rotate this AWS Access Key in AWS IAM or Secrets Manager.
+### Local Project Installation
 
-2.  CRITICAL     SAST  src/db/users.ts:14:12
-   Issue:        SEC-SAST-SQL-INJECTION — SQL Injection in Database Query
-   Evidence:     client.query('SELECT * FROM users WHERE id = ' + userId)
-   Remediation:  Use parameterized queries or prepared statements (e.g. client.query("SELECT * FROM users WHERE id = $1", [id])).
+Alternatively, add DevPilot Security as a development dependency:
 
-3.    HIGH     DEPENDENCY  axios @0.21.1 (direct)
-   Issue:        GHSA-cph5-m8f7-6c5x — Server-Side Request Forgery in axios
-   Evidence:     axios@0.21.1 satisfies affected range <0.21.2
-   Remediation:  Upgrade axios to 0.21.2 or higher.
-   Reference:    https://github.com/advisories/GHSA-cph5-m8f7-6c5x
+```bash
+npm install --save-dev devpilot-security
+```
 
-──────────────────────────────────────────────────────────────────────
-ℹ Remediation Guidance: Prioritize CRITICAL and HIGH severities. Revoke any exposed secrets immediately, upgrade vulnerable dependencies, and remediate risky source-code patterns before deploying.
-──────────────────────────────────────────────────────────────────────
+Then run commands with `npx devpilot`.
+
+---
+
+## Quick Start
+
+Once installed, verify the installation and explore the available commands:
+
+```bash
+# Verify installation and view help
+devpilot --help
+
+# Check environment health
+devpilot doctor
+
+# View project mission and founder information
+devpilot about
+
+# Run a unified security scan on the current project
+devpilot scan
+
+# Or run individual specialized scanners:
+devpilot security deps
+devpilot security secrets
+devpilot security sast
 ```
 
 ---
 
 ## Command Reference
 
-### Main Commands
-- **`devpilot scan [path]`**: Recommended primary entry point. Coordinates dependency auditing, secret scanning, and SAST code analysis in a unified run.
-- **`devpilot scan [path] --json`**: Outputs complete unified scan results as valid, unstyled JSON.
-
-### Security Commands (Specialized / Advanced)
-- **`devpilot security deps [path]`**: Runs only the dependency vulnerability scanner against `package-lock.json` and the OSV database.
-- **`devpilot security deps [path] --json`**: Outputs dependency-only scan results as JSON.
-- **`devpilot security secrets [path]`**: Runs only the local-first secret scanner against project source files.
-- **`devpilot security secrets [path] --json`**: Outputs secret-only scan results as JSON.
-- **`devpilot security sast [path]`**: Runs only the static application security testing (SAST) scanner against JavaScript and TypeScript source files.
-- **`devpilot security sast [path] --json`**: Outputs SAST-only scan results as JSON.
-
-### Utility Commands
-- **`devpilot about`**: Displays project information, founder credits, mission, installed version, and repository links.
-- **`devpilot doctor`**: Verifies local environment readiness (Node.js runtime, OS, working directory).
-- **`devpilot --version`** (`-v`): Displays installed DevPilot version.
-- **`devpilot --help`** (`-h`): Shows organized command reference and practical examples.
-
----
-
-## About DevPilot Security
-
-DevPilot Security is created by **Pranay Khodade** to provide developers with intuitive, actionable, and local-first security tooling.
-
-### Founder & Creator
-- **Founder**: Pranay Khodade
-- **Title**: Founder & Creator
-- **Project**: DevPilot Security
-- **Mission**: Help developers identify, understand, and fix security issues in their projects.
-- **Repository**: [https://github.com/pranaykhodade1922-dot/Devpilot](https://github.com/pranaykhodade1922-dot/Devpilot)
-
-To view project and founder details directly in your terminal, run:
-
-```bash
-devpilot about
-```
-
-Example output:
+DevPilot Security provides an organized, predictable CLI interface:
 
 ```text
-────────────────────────────────────────────
-             DEVPILOT SECURITY
-────────────────────────────────────────────
+Usage: devpilot [options] [command]
 
-A developer-friendly security toolkit
-for modern applications.
+DevPilot Security — Developer security toolkit for modern applications
 
-CREATED BY
-Pranay Khodade
-Founder & Creator
+Options:
+  -v, --version                Displays the current CLI version
+  -h, --help                   Display help for command
+  --no-color                   Disable colored terminal output
+  --no-animation               Disable animated spinners and dynamic terminal rendering
 
-PROJECT
-Version:       0.1.0
-Repository:    https://github.com/pranaykhodade1922-dot/Devpilot
-License:       MIT
+MAIN COMMANDS
+  scan [path]                  Run unified security scan (dependencies + secrets + SAST)
 
-OUR MISSION
-Help developers identify, understand,
-and fix security issues in their projects.
+SECURITY COMMANDS
+  security deps [path]         Scan project dependencies for known vulnerabilities via OSV
+  security secrets [path]      Scan project files for hardcoded secrets, API keys, and credentials
+  security sast [path]         Scan source code for static application security vulnerabilities
 
-────────────────────────────────────────────
-       Built for developers, by developers.
-────────────────────────────────────────────
+UTILITY COMMANDS
+  about                        Show information about DevPilot Security and its founder
+  doctor                       Checks the local DevPilot environment and dependencies
+  help [command]               Display help for command
+```
+
+### Supported Flags & Options
+
+- **`--json`**: Emits clean, unstyled, valid JSON stdout. Supported on `scan`, `security deps`, `security secrets`, and `security sast`.
+- **`--no-color`**: Disables all ANSI colors and styling while preserving ASCII terminal symbols. Can be placed globally or on subcommands.
+- **`--no-animation`**: Disables animated spinners and cursor manipulation for terminal-friendly continuous logging while keeping colors enabled.
+- **Environment Variables**: DevPilot Security honors the standard `NO_COLOR=1` and `NO_ANIMATION=1` environment variables.
+
+---
+
+## Example Scan Reports
+
+### Human-Readable Terminal Output
+
+```text
+┌───┐  DevPilot Security v0.1.0
+│ ◆ │  Developer security toolkit for modern applications
+└───┘  Target: /path/to/my-app
+
+  ✔ Dependency Scanner [CLEAN] — 0 issues detected
+  ✔ Secret Scanner [CLEAN] — 0 issues detected
+  ✖ SAST Scanner [VULNERABLE] — 1 issue(s) found
+
+ DevPilot Security Report
+──────────────────────────────────────────────────────────────────────
+Project:              my-app
+Project Root:         /path/to/my-app
+Language / Tech:      TypeScript (Express)
+Package Manager:      npm
+Scan Duration:        48ms
+──────────────────────────────────────────────────────────────────────
+Scanner Status:
+  Dependency Scanner: Completed
+  Secret Scanner:     Completed
+  SAST Scanner:       Completed
+──────────────────────────────────────────────────────────────────────
+Total findings:        1
+──────────────────────────────────────────────────────────────────────
+Findings by Severity:
+   CRITICAL  1       HIGH    0     MODERATE  0       LOW     0     UNKNOWN   0
+──────────────────────────────────────────────────────────────────────
+Findings Details:
+
+1.  CRITICAL   SAST  src/db/users.ts:14:12
+   Issue:        SEC-SAST-SQL-INJECTION — SQL Injection in Database Query
+   Evidence:     client.query('SELECT * FROM users WHERE id = ' + userId)
+   Remediation:  Use parameterized queries or prepared statements (e.g. client.query("SELECT * FROM users WHERE id = $1", [id])).
+
+──────────────────────────────────────────────────────────────────────
+ℹ Remediation Guidance: Prioritize CRITICAL and HIGH severities. Revoke any exposed secrets immediately, upgrade vulnerable dependencies, and remediate risky source-code patterns before deploying.
+──────────────────────────────────────────────────────────────────────
+```
+
+### Machine-Readable JSON Output (`--json`)
+
+In `--json` mode, banners, divider lines, and progress messages are suppressed. The stdout is guaranteed to parse with `JSON.parse()`:
+
+```bash
+devpilot scan --json > report.json
+```
+
+```json
+{
+  "summary": {
+    "projectName": "my-app",
+    "projectRoot": "/path/to/my-app",
+    "framework": "Express",
+    "language": "TypeScript",
+    "packageManager": "npm",
+    "totalFindings": 1,
+    "severityCounts": {
+      "CRITICAL": 1,
+      "HIGH": 0,
+      "MODERATE": 0,
+      "LOW": 0,
+      "UNKNOWN": 0
+    },
+    "scanStatus": "VULNERABLE",
+    "durationMs": 48,
+    "scanners": {
+      "dependency": { "name": "Dependency Scanner", "status": "COMPLETED", "findingsCount": 0, "durationMs": 12 },
+      "secret": { "name": "Secret Scanner", "status": "COMPLETED", "findingsCount": 0, "durationMs": 14 },
+      "sast": { "name": "SAST Scanner", "status": "COMPLETED", "findingsCount": 1, "durationMs": 22 }
+    }
+  },
+  "findings": [
+    {
+      "id": "SEC-SAST-SQL-INJECTION-src/db/users.ts:14:12",
+      "scanner": "sast-scanner",
+      "vulnerabilityId": "SEC-SAST-SQL-INJECTION",
+      "title": "SQL Injection in Database Query",
+      "severity": "CRITICAL",
+      "location": {
+        "filePath": "src/db/users.ts",
+        "line": 14,
+        "column": 12
+      },
+      "evidence": "client.query('SELECT * FROM users WHERE id = ' + userId)",
+      "remediation": "Use parameterized queries or prepared statements (e.g. client.query(\"SELECT * FROM users WHERE id = $1\", [id]))."
+    }
+  ]
+}
 ```
 
 ---
 
-## Detailed Scanner Capabilities
+## Detailed Scanner Explanations
 
-### 1. Dependency Vulnerability Scanner
-- **Full Advisory Hydration**: Retrieves detailed advisory records (`GET /v1/vulns/{id}`) with in-memory caching and bounded concurrency.
-- **Accurate Semver Range Matching**: Validates installed package versions against advisory `introduced`, `fixed`, `last_affected`, `limit` intervals, and explicit version lists to eliminate false positives.
-- **CVSS Scoring & Vector Interpretation**: Evaluates CVSS v3 / v3.1 vector strings and numeric scores to accurately categorize severities into `CRITICAL`, `HIGH`, `MODERATE`, and `LOW`.
-- **Intelligent Remediation**: Recommends the safest upgrade path (patch/minor updates within the current major line vs. notifying when breaking major bumps are required).
-- **Monorepo & Workspace Filtering**: Automatically ignores local workspace links (`link: true`, `file:`, `workspace:`), ensuring internal proprietary package names are never sent to external APIs.
-- **npm Alias Support**: Accurately tracks aliased npm packages (e.g., `"my-react": "npm:react@^18.2.0"`) as direct dependencies.
-- **Advisory Deduplication**: Unifies duplicate advisories sharing aliases (CVE, GHSA, OSV) for the same installed dependency.
+### 1. Dependency Scanner (`devpilot security deps`)
 
-### 2. Secret Scanner
-- **Extensible Detection Rules**: 10 built-in rules detecting AWS access keys & secrets, Google Cloud / Firebase API keys, GitHub tokens (PAT, OAuth, app), GitLab tokens (PAT, pipeline, deploy), Slack tokens & webhooks, Database URIs with credentials (PostgreSQL, MySQL, MongoDB, Redis), RSA/EC/OPENSSH/PGP private keys, generic passwords, and context-supported high-entropy values.
-- **Strict In-Memory Masking & Redaction**: Raw secret values are NEVER stored in findings, logs, JSON, or console output. Multi-level redaction masks tokens (e.g. `AKI...[REDACTED]...PLE`) and replaces multiline PEM private-key blocks with line-preserving placeholders (`[REDACTED PRIVATE KEY LINE]`) to maintain accurate line numbering.
-- **Safe & Resilient File Crawling**: Respects `.gitignore` (including nested rules, negation patterns, and directory anchors), automatically ignores build artifacts (`node_modules`, `dist`, `build`, `coverage`, `.git`), skips binary files via null-byte inspection (`\0`), and enforces a 2 MB file size limit.
-- **Path Containment & Symlink Safety**: Rejects traversal outside the scan root directory and skips symbolic links by default to prevent directory escapes and infinite loops.
-- **Honest Skipped Reporting**: Accurately tracks intentionally excluded files (ignored by rule/policy) separately from error-skipped files (I/O or size errors), ensuring unreadable files trigger appropriate non-zero exit codes.
+- **Lockfile & Package Analysis**: Parses `package-lock.json` (supporting versions 2 and 3), resolves direct vs. transitive dependencies, and properly handles npm aliases (e.g., `"my-react": "npm:react@^18.2.0"`).
+- **OSV.dev Vulnerability Lookup**: Chunks unique package/version pairs into batches and queries the official Open Source Vulnerabilities (OSV) API over HTTPS. Automatically hydrates full vulnerability records with bounded concurrency and session caching.
+- **Semver Range Validation**: Compares installed package versions against precise advisory version intervals (`introduced`, `fixed`, `last_affected`, and `limit`) using the `semver` engine, preventing false positive alerts for patched versions.
+- **Network Requirements & Offline Handling**: Requires outbound HTTPS access to `https://api.osv.dev`. If network connectivity is unavailable, the dependency scan fails safely with exit code `2` (FAILED) and will never falsely report a clean state.
+- **Limitations**: Audits installed packages recorded in `package-lock.json`. It does not execute npm scripts, resolve arbitrary lockfile-less manifests, or scan non-npm ecosystems.
 
-### 3. Static Application Security Testing (SAST)
-- **Safe Abstract Syntax Tree (AST) Parsing**: Analyzes JavaScript, TypeScript, JSX, TSX, MJS, and CJS source files using the TypeScript Compiler API without executing scanned project code.
-- **Import & Lexical Scope Tracking**: Accurately tracks renamed imports, namespace imports (`import * as cp from 'child_process'`), CommonJS `require()` destructuring, and nested lexical scopes (blocks, functions, parameters, destructuring) to eliminate false positives on shadowed identifiers.
-- **Built-in SAST Rules Catalog**:
-  1. **`SEC-SAST-EVAL`** (CWE-95, CWE-94, OWASP A03:2021): Flags dynamic string evaluation via global `eval()`, `window.eval()`, `globalThis.eval()`, and the `Function` constructor.
-  2. **`SEC-SAST-REACT-DANGEROUS-HTML`** (CWE-79, OWASP A03:2021): Flags dynamic `__html` assignments in React `dangerouslySetInnerHTML`. Recognizes verified sanitizers (`DOMPurify.sanitize()`) and distinguishes static strings.
-  3. **`SEC-SAST-COMMAND-INJECTION`** (CWE-78, OWASP A03:2021): Detects dynamic arguments passed to `child_process.exec()` or `execSync()`. Recommends `execFile()` or `spawn()` with separate argument arrays and warns against `shell: true`.
-  4. **`SEC-SAST-SQL-INJECTION`** (CWE-89, OWASP A03:2021): Flags string concatenation, dynamic template literals, and Prisma `$queryRawUnsafe()` calls in database query sinks. Parameterized queries (`query("SELECT ... WHERE id = $1", [id])`) and static queries are recognized as safe.
-  5. **`SEC-SAST-INNERHTML`** (CWE-79, OWASP A03:2021): Detects unescaped dynamic HTML assigned to `element.innerHTML`, `element.outerHTML`, or `element.insertAdjacentHTML()`. Recognizes verified DOMPurify sanitization.
-  6. **`SEC-SAST-INSECURE-HTTP`** (CWE-319, OWASP A02:2021): Detects unencrypted `http://` or `ws://` network endpoints in `fetch()`, `axios`, `XMLHttpRequest`, and `WebSocket`. Excludes local development endpoints (`localhost`, `127.0.0.1`, `[::1]`) and schema namespaces (`w3.org`).
-  7. **`SEC-SAST-WEAK-CRYPTO`** (CWE-327, CWE-328, CWE-338, OWASP A02:2021): Flags broken hash algorithms (MD5, SHA-1), deprecated `crypto.createCipher()`, weak ciphers (DES, RC4), and insecure `Math.random()` used in security-sensitive credential or token generation contexts.
-- **Fault-Tolerant Scanning**: Recovers gracefully from syntax errors, records diagnostic records, and flags partial scans so projects with parse errors are never falsely reported as clean.
-- **Limitations**: Performs AST pattern matching, import resolution, and lexical scope tracking. It does not perform full runtime taint tracking across module boundaries and cannot guarantee complete vulnerability detection.
+### 2. Secret Scanner (`devpilot security secrets`)
 
-### 4. Scanner Coverage & Principles
-- **Current Coverage**: npm package dependencies (`package-lock.json` v2/v3), project file secrets, and JavaScript/TypeScript SAST.
-- **Local-First & Non-Destructive**: DevPilot Security never modifies scanned source files, never alters dependencies, and never transmits secrets or source code over the network.
+- **Supported Secret Patterns**: Built-in declarative rules with false-positive reduction filters for:
+  - AWS Access Key IDs (`AKIA...`) and AWS Secret Access Keys
+  - Google Cloud / Firebase API keys (`AIza...`)
+  - GitHub Personal Access Tokens (classic `ghp_` and fine-grained `github_pat_`), OAuth tokens, and App keys
+  - GitLab Personal Access Tokens (`glpat-`), Deploy tokens, and Runner registration tokens
+  - Slack Bot/User tokens (`xoxb-`, `xoxp-`) and Incoming Webhooks
+  - Database connection strings containing embedded credentials (PostgreSQL, MySQL, MongoDB, Redis)
+  - RSA, EC, OPENSSH, and PGP Private Key blocks
+  - Generic high-entropy passwords and API key assignments
+- **Masking & Multiline Redaction**: Raw secret values are **never** preserved in memory structures, console output, logs, or JSON reports. Findings display masked tokens (e.g., `AKIA...[REDACTED]...PLE`), and multiline PEM private keys are redacted line-by-line (`[REDACTED PRIVATE KEY LINE]`) to maintain accurate line numbering.
+- **File Crawling & Scope**: Respects `.gitignore` rules, automatically skips build directories (`node_modules`, `dist`, `build`, `coverage`, `.git`), ignores binary files via null-byte inspection (`\0`), and enforces a strict 2 MB maximum file size limit.
+- **Limitations**: Designed to detect common credential formats, token structures, and high-entropy strings. Cannot detect obfuscated, encrypted, or split keys.
+
+### 3. Static Application Security Testing (SAST) (`devpilot security sast`)
+
+DevPilot Security parses source files into an Abstract Syntax Tree (AST) using the TypeScript Compiler API without executing scanned project code. It implements safe import resolution and lexical scope tracking.
+
+#### The 7 Implemented SAST Rules:
+
+1. **`SEC-SAST-SQL-INJECTION`** (CWE-89, OWASP A03:2021)
+   - *Rule ID*: `SEC-SAST-SQL-INJECTION`
+   - *Name*: SQL Injection in Database Query
+   - *Severity / Confidence*: `CRITICAL` / `HIGH`
+   - *Detection*: Dynamically constructed SQL queries (string concatenation, dynamic template literals, or Prisma `$queryRawUnsafe`) passed to database query methods (`client.query()`, `pool.query()`, `sqlite.all()`, etc.).
+   - *Safe patterns*: Parameterized queries with placeholder arrays, static queries, and tagged template literals (`prisma.$queryRaw` or `sql\``).
+2. **`SEC-SAST-COMMAND-INJECTION`** (CWE-78, OWASP A03:2021)
+   - *Rule ID*: `SEC-SAST-COMMAND-INJECTION`
+   - *Name*: Command Injection via child_process.exec()
+   - *Severity / Confidence*: `CRITICAL` / `MEDIUM` (dynamic commands); `LOW` / `HIGH` (compile-time static commands)
+   - *Detection*: Dynamic commands or unvalidated variables passed to `child_process.exec()` or `execSync()`.
+   - *Safe patterns*: Using `execFile()` or `spawn()` with an executable binary and a separate array of string arguments, avoiding `shell: true`.
+3. **`SEC-SAST-INNERHTML`** (CWE-79, OWASP A03:2021)
+   - *Rule ID*: `SEC-SAST-INNERHTML`
+   - *Name*: Unsafe DOM HTML Injection (innerHTML / outerHTML / insertAdjacentHTML)
+   - *Category*: DOM XSS (Cross-Site Scripting)
+   - *Severity / Confidence*: `HIGH` / `HIGH`
+   - *Detection*: Unescaped dynamic strings assigned to DOM insertion sinks (`element.innerHTML`, `element.outerHTML`, `element.insertAdjacentHTML()`). Harmless DOM clearing assignments (`element.innerHTML = ''`) are suppressed.
+   - *Safe patterns*: Pre-sanitizing HTML using verified sanitizers (e.g. `DOMPurify.sanitize()`), static markup, or using `textContent`.
+4. **`SEC-SAST-EVAL`** (CWE-95, CWE-94, OWASP A03:2021)
+   - *Rule ID*: `SEC-SAST-EVAL`
+   - *Name*: Dynamic Code Execution via eval() or Function()
+   - *Severity / Confidence*: `CRITICAL` / `HIGH` (dynamic expressions or `Function` constructor); `MODERATE` / `HIGH` (static strings)
+   - *Detection*: Dynamic code evaluation via global `eval()`, `window.eval()`, `globalThis.eval()`, or the `Function` constructor.
+   - *Safe patterns*: `JSON.parse()` for serialized data, Web Workers for isolated execution, or native mapping dispatch tables.
+5. **`SEC-SAST-REACT-DANGEROUS-HTML`** (CWE-79, OWASP A03:2021)
+   - *Rule ID*: `SEC-SAST-REACT-DANGEROUS-HTML`
+   - *Name*: Unsafe HTML Injection via React dangerouslySetInnerHTML
+   - *Severity / Confidence*: `HIGH` / `HIGH`
+   - *Detection*: Assigning dynamic variables or expressions to React's `dangerouslySetInnerHTML={{ __html: ... }}`.
+   - *Safe patterns*: Wrapping dynamic markup in `DOMPurify.sanitize()` or using standard JSX elements.
+6. **`SEC-SAST-INSECURE-HTTP`** (CWE-319, OWASP A02:2021)
+   - *Rule ID*: `SEC-SAST-INSECURE-HTTP`
+   - *Name*: Insecure HTTP Network Request
+   - *Severity / Confidence*: `MODERATE` / `HIGH`
+   - *Detection*: Cleartext `http://` or `ws://` network endpoints used in `fetch()`, `axios`, `XMLHttpRequest`, or `WebSocket`.
+   - *Safe patterns*: Encrypted protocols (`https://`, `wss://`). Local loopback endpoints (`localhost`, `127.0.0.1`, `0.0.0.0`, `[::1]`) and schema URLs (e.g. `http://www.w3.org/...`, `http://json-schema.org/...`) are deliberately recognized as safe development/namespace exceptions and ignored.
+7. **`SEC-SAST-WEAK-CRYPTO`** (CWE-327, CWE-328, CWE-338, OWASP A02:2021)
+   - *Rule ID*: `SEC-SAST-WEAK-CRYPTO`
+   - *Name*: Use of Weak Cryptographic Algorithm or Insecure PRNG
+   - *Severity / Confidence*: `HIGH` / `HIGH`
+   - *Detection*: Broken hash algorithms (MD5, SHA-1), deprecated ciphers (`crypto.createCipher()`, DES, RC4), and cryptographically insecure pseudo-random numbers (`Math.random()`) used in security-sensitive contexts (tokens, secrets, passwords, auth keys).
+   - *Safe patterns*: Modern cryptographic hashes (SHA-256, SHA-512), `crypto.createCipheriv()`, and `crypto.randomBytes()`.
+
+#### SAST Architecture & Limitations
+
+- **AST Pattern & Scope Analysis**: DevPilot's SAST engine inspects AST syntax nodes, tracks imports (`import * as cp`, CommonJS `require()`), and models lexical scopes.
+- **Current Boundaries**: The current engine is pattern- and AST-based. It does not perform full interprocedural or cross-file dataflow taint analysis. It cannot guarantee detection of every vulnerability or certify that code is completely bug-free.
 
 ---
 
-## Code Examples: Unsafe vs. Safe
+## Safe vs. Unsafe Code Reference
 
-| Category | Unsafe Code | Safe Code |
+| Vulnerability Category | Unsafe Code | Safe Code |
 | :--- | :--- | :--- |
 | **SQL Injection** | `db.query('SELECT * FROM users WHERE id = ' + id)` | `db.query('SELECT * FROM users WHERE id = $1', [id])` |
 | **Prisma Queries** | `prisma.$queryRawUnsafe('SELECT * FROM items WHERE id = ' + id)` | `prisma.$queryRaw\`SELECT * FROM items WHERE id = ${id}\`` |
+| **Command Injection** | `exec('ping -c 1 ' + host)` | `execFile('ping', ['-c', '1', host])` |
 | **DOM XSS** | `el.innerHTML = '<div>' + userComment + '</div>'` | `el.innerHTML = DOMPurify.sanitize(userComment)` |
 | **React XSS** | `<div dangerouslySetInnerHTML={{ __html: userHtml }} />` | `<div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(userHtml) }} />` |
-| **Command Injection** | `exec('ping -c 1 ' + host)` | `execFile('ping', ['-c', '1', host])` |
 | **Code Evaluation** | `eval(userPayload)` | `JSON.parse(userPayload)` |
 | **Network Requests** | `fetch('http://api.myservice.com/v1/data')` | `fetch('https://api.myservice.com/v1/data')` |
 | **Hashing** | `crypto.createHash('md5').update(data)` | `crypto.createHash('sha256').update(data)` |
@@ -209,200 +321,51 @@ and fix security issues in their projects.
 
 ## CLI Exit Codes
 
-DevPilot Security returns predictable, standardized process exit codes designed for local development and CI/CD pipelines:
+DevPilot Security returns standardized, predictable process exit codes across both unified scanning (`devpilot scan`) and all standalone security commands (`devpilot security deps`, `devpilot security secrets`, `devpilot security sast`):
 
-| Exit Code | Status | Meaning |
+| Exit Code | Status | Meaning across Unified and Standalone Scanners |
 | :---: | :--- | :--- |
-| **`0`** | **CLEAN** | Scan completed successfully. No vulnerabilities, secrets, or SAST issues were identified. |
-| **`1`** | **VULNERABLE** | Scan completed successfully, but one or more security findings were detected in dependencies, secrets, or source code. |
-| **`2`** | **FAILED** | Scan failed or could not complete reliably (e.g., target directory not found, missing lockfile, network unavailable during required dependency scan). |
-| **`3`** | **PARTIAL** | Scan completed partially (e.g., files had syntax/parse errors, or files exceeded size limits). Cannot be certified clean. |
+| **`0`** | **CLEAN** | Scan completed successfully with zero findings (no vulnerabilities, no secrets, or no SAST issues detected). |
+| **`1`** | **VULNERABLE** | Scan completed successfully and detected one or more security findings (vulnerabilities, hardcoded secrets, or risky AST patterns). |
+| **`2`** | **FAILED** | Scan encountered an unrecoverable failure (e.g. missing `package-lock.json`, network unavailable during dependency lookup, invalid target directory). Scans that fail are never certified clean. |
+| **`3`** | **PARTIAL** | Scan completed partially with warnings (e.g. recoverable syntax/parse errors, files exceeding 2 MB size limits, or unhydrated advisories). Even with zero findings in analyzed files, partial scans are never certified clean. |
+
+Utility commands (`devpilot about`, `devpilot doctor`, and `devpilot --help`) exit with code `0` on successful completion. Invalid CLI arguments, unknown commands, or unrecognized options exit with code `1` via Commander.
 
 ---
 
-## CI/CD Pipeline Integration
+## Supported Platforms & Prerequisites
 
-DevPilot Security can be integrated into GitHub Actions, GitLab CI, or any automated pipeline.
-
-### Example: GitHub Actions Workflow
-
-```yaml
-name: Security Audit
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-jobs:
-  audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run DevPilot Security Audit
-        run: npx devpilot security deps
-```
-
-### Scripting with Exit Codes in CI
-
-```bash
-# Example shell script distinguishing vulnerabilities from infrastructure errors
-npx devpilot security deps
-STATUS=$?
-
-if [ $STATUS -eq 0 ]; then
-  echo "✔ Security check passed! No vulnerabilities."
-elif [ $STATUS -eq 1 ]; then
-  echo "✖ Security check failed! Vulnerabilities detected in dependencies."
-  exit 1
-elif [ $STATUS -eq 2 ]; then
-  echo "⚠ Infrastructure error: Lockfile missing or scanner failed."
-  exit 2
-elif [ $STATUS -eq 3 ]; then
-  echo "⚠ Partial scan: Upstream advisory service unavailable. Review logs."
-  exit 3
-fi
-```
+- **Node.js**: `>= 18.0.0` (ESM and native `fetch` required)
+- **Package Manager**: npm `>= 9.0.0` (A valid `package-lock.json` v2 or v3 is required for dependency vulnerability scanning)
+- **Operating Systems**: Linux, macOS, and Windows (PowerShell, CMD, Windows Terminal)
+- **Source Languages**: JavaScript (ES5+), TypeScript, JSX, TSX, MJS, and CJS
 
 ---
 
-## Partial Scans Explained
+## Authorized-Use & Safety Boundaries
 
-In production, security scanners query remote advisory databases like OSV. A network glitch or upstream 404 for a single advisory record should not crash an entire build pipeline, but it **must never be reported as a clean scan**.
-
-When DevPilot Security receives candidate vulnerability IDs from the OSV batch query, but is unable to retrieve the complete advisory record for one or more IDs (e.g. due to individual request timeouts or rate limits):
-1. The scanner flags the finding as incomplete (`isIncomplete: true`) and presents the available minimal metadata.
-2. The overall scan status is set to **`PARTIAL`**.
-3. The process exits with **Exit Code `3`**.
-4. Both human terminal output and JSON reports include clear notices indicating that incomplete upstream data prevented full certification.
+DevPilot Security is designed strictly for authorized security analysis, code quality auditing, and defensive software engineering:
+1. **100% Non-Destructive**: Never mutates, deletes, or alters scanned files or package manifests.
+2. **Defensive Testing**: Only scan projects, repositories, and dependencies that you own or have explicit authorization to inspect.
+3. **No Warranty of Total Protection**: Security tools reduce risk but cannot guarantee total immunity. DevPilot Security should be used as one component of a layered defense-in-depth strategy.
 
 ---
 
-## CVSS Severity Sources & Transparency
+## Contributing
 
-DevPilot Security distinguishes between different sources of vulnerability severity ratings rather than conflating them:
-
-- **OSV / Advisory Database (`database_specific`)**: The severity rating explicitly published by the advisory author or database maintainer (e.g., GitHub Security Advisories).
-- **Calculated CVSS v3/v3.1 (`calculated_cvss3`)**: Calculated locally from the official CVSS v3.x vector using the FIRST.org v3.1 standard scoring equation.
-- **Advisory Score (`explicit_score`)**: A numeric CVSS base score provided directly by the upstream vulnerability record.
-- **CVSS v4.0 Handling**: When an advisory specifies a `CVSS:4.0` vector, DevPilot Security preserves the complete v4 vector and qualitative severity from the advisory database without incorrectly computing an artificial score using legacy v3 formulas.
-- **Indeterminate (`unknown`)**: When neither an advisory database severity nor a calculable vector is available, the rating is reported as `UNKNOWN` rather than guessing or fabricating severity.
+We welcome community contributions, bug reports, and rule suggestions. Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for setup instructions, coding conventions, and pull request guidelines.
 
 ---
 
-## Architecture
+## Security Policy
 
-```
-devpilot/
-├── src/
-│   ├── cli/
-│   │   ├── commands/
-│   │   │   ├── doctor.ts               # Environment diagnostic command
-│   │   │   ├── scan.ts                 # Unified security scanner command (deps + secrets)
-│   │   │   └── security.ts             # Security scanning & exit code handling
-│   │   └── index.ts                    # Commander CLI entry point
-│   ├── core/
-│   │   ├── finding.ts                  # Standardized SecurityFinding interface & severity model
-│   │   └── project-detector.ts         # Framework and language detection engine
-│   ├── scanners/
-│   │   ├── dependency/
-│   │   │   ├── types.ts                # Lockfile & OSV client data models
-│   │   │   ├── semver-matcher.ts       # Accurate semver range and event interval evaluator
-│   │   │   ├── cvss-helper.ts          # FIRST.org CVSS v3.1 vector calculator & scoring
-│   │   │   ├── lockfile-parser.ts      # package-lock.json v2/v3 parser (workspaces & aliases)
-│   │   │   ├── osv-client.ts           # OSV batch client & advisory hydration with cache
-│   │   │   ├── dependency-scanner.ts   # Scanner orchestrator & finding normalizer
-│   │   │   └── index.ts                # Scanner exports
-│   │   └── secret/
-│   │       ├── types.ts                # Secret rules, matches, categories & scan metrics
-│   │       ├── entropy.ts              # Shannon entropy computation engine
-│   │       ├── masking.ts              # Safe secret masking & multiline PEM block redaction
-│   │       ├── rules.ts                # 10 built-in detection rules with false-positive filters
-│   │       ├── file-crawler.ts         # Safe recursive crawler with .gitignore & size checks
-│   │       ├── secret-scanner.ts       # Secret scanning orchestrator & finding generator
-│   │       └── index.ts                # Module exports
-│   ├── utils/
-│   │   └── version.ts                  # Safe CLI version resolution
-│   └── index.ts                        # Library public API exports
-├── tests/
-│   ├── cli/
-│   │   ├── exit-codes.test.ts          # Tests for Exit Codes 0, 1, 2, and 3
-│   │   ├── security-secrets.test.ts    # CLI integration tests for devpilot security secrets
-│   │   └── unified-scan.test.ts        # CLI integration tests for unified devpilot scan
-│   ├── doctor.test.ts                  # Environment diagnostic tests
-│   ├── project-detector.test.ts        # Project detection tests
-│   └── scanners/
-│       ├── dependency/
-│       │   ├── semver-matcher.test.ts  # Semver range matching & prerelease tests
-│       │   ├── cvss-helper.test.ts     # CVSS vector calculation tests
-│       │   ├── lockfile-parser.test.ts # Lockfile parsing, aliases & workspace tests
-│       │   ├── osv-client.test.ts      # OSV API client, cache & hydration tests
-│       │   └── dependency-scanner.test.ts # End-to-end scanner & deduplication tests
-│       └── secret/
-│           ├── entropy.test.ts         # Shannon entropy unit tests
-│           ├── masking.test.ts         # Redaction & private-key masking unit tests
-│           ├── rules.test.ts           # 10 built-in rules & false-positive filter tests
-│           ├── file-crawler.test.ts    # Traversal, gitignore & symlink containment tests
-│           └── secret-scanner.test.ts  # Secret scanner orchestrator & finding tests
-├── package.json
-├── tsconfig.json
-├── tsup.config.ts
-├── .gitignore
-└── README.md
-```
+For information on reporting security vulnerabilities in DevPilot Security itself, please review our [SECURITY.md](./SECURITY.md).
 
 ---
 
-## Prerequisites
+## License
 
-- **Node.js**: `>= 18.0.0` (Native `fetch` and ESM required)
-- **npm**: `>= 9.0.0`
+DevPilot Security is open-source software licensed under the [MIT License](./LICENSE).
 
----
-
-## Development Setup
-
-1. **Install dependencies:**
-
-   ```bash
-   npm install
-   ```
-
-2. **Run TypeScript typecheck:**
-
-   ```bash
-   npm run typecheck
-   ```
-
-3. **Run unit tests:**
-
-   ```bash
-   npm test
-   ```
-
-4. **Build production bundle:**
-
-   ```bash
-   npm run build
-   ```
-
----
-
-## Safety & Security Guarantees
-
-- **100% Read-Only**: The scanner never modifies, mutates, or deletes `package.json`, `package-lock.json`, source files, or credentials.
-- **Privacy Conscious & Local-First**: Secret scanning is completely local. Discovered secrets are never transmitted externally or sent to any remote API.
-- **Strict Redaction**: Raw secret values are never printed in terminal output, logs, errors, or JSON findings. Full multiline private-key payloads are protected.
-- **Zero Package Execution**: Never invokes package lifecycle scripts (`postinstall`, etc.) or arbitrary shell commands.
-- **Fail-Safe Status**: Network timeouts, missing paths, or corrupted files trigger non-zero exit codes (`2` FAILED or `3` PARTIAL) and are never reported as clean.
+Copyright (c) 2026 Pranay Khodade
